@@ -104,7 +104,7 @@ Wireless adapter = ワイヤレスアダプター
 # Additional UI translations (PR #3653)
 fully charged = 充電完了
 Battery alerts = バッテリー通知
-Use default (15%) = デフォルトを使用（15%）
+Use default (20%) = デフォルトを使用（20%）
 Disable notifications = 通知を無効にする
 Rename device... = デバイスの名前を変更...
 Reset to original name = 元の名前に戻す

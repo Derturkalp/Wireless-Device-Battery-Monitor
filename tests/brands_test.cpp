@@ -40,6 +40,9 @@ int main() {
     Expect(L"coolermaster:x", L"MM712", 0, K::Mouse, Accent::CoolerMaster);
     Expect(L"steam:x", L"Controller", 0, K::Gamepad, Accent::Steam);
     Expect(L"redragon:fa7e", L"Invader Pro", 0, K::Mouse, Accent::Redragon);
+    Expect(L"atk-serial:1204", L"ATK N9 Ultra", 0x373B, K::Headset, Accent::Atk);
+    Expect(L"kysona:373B:1085", L"VXE R1 Pro", 0x373B, K::Mouse, Accent::Atk);
+    Expect(L"mchose:3837:1014", L"K7 V2 Ultra+", 0x3837, K::Mouse, Accent::Mchose);
     // Vendor ids (HeadsetControl and plain Bluetooth / HID devices).
     Expect(L"hsc:1038:12e0", L"Arctis Nova 7", 0x1038, K::Headset, Accent::SteelSeries);
     Expect(L"hsc:1b1c:0a6b", L"Void Wireless", 0x1B1C, K::Headset, Accent::Corsair);

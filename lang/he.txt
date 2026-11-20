@@ -105,7 +105,7 @@ Wireless adapter = מתאם אלחוטי
 # Additional UI translations (PR #3653)
 fully charged = טעון במלואו
 Battery alerts = התראות סוללה
-Use default (15%) = שימוש בברירת המחדל (15%)
+Use default (20%) = שימוש בברירת המחדל (20%)
 Disable notifications = השבת התראות
 Rename device... = שנה שם התקן...
 Reset to original name = אפס לשם המקורי

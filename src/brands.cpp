@@ -25,6 +25,8 @@ const BrandStyle kBrands[] = {
     { Accent::CoolerMaster, L"Cooler Master",{ 157, 107, 255 }, { 106,  43, 217 } },  // purple
     { Accent::Steam,        L"Steam",        {  26, 159, 255 }, {  11, 111, 191 } },  // #1A9FFF
     { Accent::Redragon,     L"Redragon",     { 230,   0,  18 }, { 192,   0,  15 } },  // #E60012
+    { Accent::Atk,          L"ATK",          {   0, 214, 255 }, {   0, 120, 160 } },  // kisisel: cyan
+    { Accent::Mchose,       L"MCHOSE",       { 190, 110, 255 }, { 120,  40, 200 } },  // kisisel: purple
 };
 
 std::wstring Lower(std::wstring s) {
@@ -63,6 +65,9 @@ const KeyRule kKeys[] = {
     { L"coolermaster:", Accent::CoolerMaster },
     { L"steam:", Accent::Steam },
     { L"redragon:", Accent::Redragon },
+    { L"atk_keyboard:", Accent::Atk }, { L"atknano8k:", Accent::Atk }, { L"atknk:", Accent::Atk },
+    { L"atkzero:", Accent::Atk }, { L"atk-serial:", Accent::Atk },
+    { L"mchose:", Accent::Mchose },
 };
 
 // Vendor ids that only one of these brands uses. Shared ones are left to the name check:
@@ -82,6 +87,8 @@ const VidRule kVids[] = {
     { 0x0ECB, Accent::Jbl },
     { 0x2516, Accent::CoolerMaster },
     { 0x28DE, Accent::Steam },
+    { 0x373B, Accent::Atk },        // ATK receivers and headsets
+    { 0x3837, Accent::Mchose },     // MCHOSE (Realtek) receivers
 };
 
 enum class How { Contains, Word, Prefix, Exact };
@@ -113,6 +120,8 @@ const NameRule kNames[] = {
     { L"cooler master", How::Contains, Accent::CoolerMaster }, { L"coolermaster", How::Contains, Accent::CoolerMaster },
     { L"steam controller", How::Contains, Accent::Steam },
     { L"redragon", How::Contains, Accent::Redragon },
+    { L"atk", How::Word, Accent::Atk }, { L"vxe", How::Word, Accent::Atk },
+    { L"mchose", How::Contains, Accent::Mchose },
 };
 
 bool Matches(const std::wstring& n, const NameRule& r) {

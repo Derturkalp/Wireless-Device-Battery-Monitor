@@ -105,7 +105,7 @@ Wireless adapter = محول لاسلكي
 # Additional UI translations (PR #3653)
 fully charged = مشحونة بالكامل
 Battery alerts = تنبيهات البطارية
-Use default (15%) = استخدام الافتراضي (15%)
+Use default (20%) = استخدام الافتراضي (20%)
 Disable notifications = تعطيل الإشعارات
 Rename device... = إعادة تسمية الجهاز...
 Reset to original name = إعادة تعيين للاسم الأصلي

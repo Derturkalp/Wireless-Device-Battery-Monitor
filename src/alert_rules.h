@@ -7,7 +7,7 @@
 #include <string>
 
 namespace alerts {
-constexpr int kDefaultThreshold = 15;
+constexpr int kDefaultThreshold = 20;  // kisisel: was 15
 constexpr int kUseDefault = -2;   // no per-device override persisted
 constexpr int kDisabled = -1;     // notifications disabled for this device
 constexpr int kThresholds[] = {5, 10, 15, 20, 25, 30, 35, 40};
