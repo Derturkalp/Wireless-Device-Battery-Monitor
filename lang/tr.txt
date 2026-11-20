@@ -104,7 +104,7 @@ Wireless adapter = Kablosuz adaptör
 # Additional UI translations (PR #3653)
 fully charged = tam şarjlı
 Battery alerts = Pil uyarıları
-Use default (15%) = Varsayılanı kullan (%15)
+Use default (20%) = Varsayılanı kullan (%20)
 Disable notifications = Bildirimleri devre dışı bırak
 Rename device... = Cihazı yeniden adlandır...
 Reset to original name = Özgün ada sıfırla

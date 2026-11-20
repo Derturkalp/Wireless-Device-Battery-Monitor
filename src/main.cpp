@@ -39,7 +39,7 @@ constexpr UINT_PTR TIMER_ALERT_ICON = 3;
 // "Check battery every" choices in seconds; 60 is the default. A poll resets an awake device's sleep timer,
 // so a device only sleeps if its timer is shorter than the interval.
 constexpr DWORD POLL_SECONDS[] = { 30, 60, 120, 300, 600, 900, 1800, 3600 };
-constexpr int LOW_BATTERY = 15;
+constexpr int LOW_BATTERY = 20;  // kisisel: was 15
 constexpr UINT PLACEHOLDER_ID = 1;
 constexpr UINT ALERT_ICON_ID = 2;
 
@@ -224,7 +224,7 @@ void SaveBoolSetting(const wchar_t* name, bool on) {
 }
 
 // A REG_MULTI_SZ with one "device-key<TAB>threshold" entry per override.
-// Threshold -1 disables alerts; a missing key uses the default 15%.
+// Threshold -1 disables alerts; a missing key uses the default 20% (kisisel).
 std::map<std::wstring, int> g_alertOverrides;
 
 void LoadAlertThresholds() {
@@ -430,7 +430,7 @@ HICON IconFor(int pct, bool charging, bool dim, Accent accent) {
     BrandColor bc = AccentColor(accent, g_lightTaskbar);
     Rgb bar = charging        ? Rgb{ 0, 170, 255 }
             : pct <= LOW_BATTERY ? Rgb{ 232, 32, 48 }
-            : pct <= 30       ? Rgb{ 255, 150, 0 }
+            : pct <= 40       ? Rgb{ 255, 150, 0 }  // kisisel: was 30
             : accent != Accent::None ? Rgb{ bc.r, bc.g, bc.b }
                               : Rgb{ 30, 190, 90 };
     Rgb text = (!charging && pct >= 0 && pct <= LOW_BATTERY) ? Rgb{ 240, 50, 60 } : fg;
@@ -850,7 +850,7 @@ void ShowMenu() {
         HMENU alertMenu = CreatePopupMenu();
         int selectedThreshold = alerts::OverrideFor(g_alertOverrides, k);
         AppendMenuW(alertMenu, MF_STRING | (selectedThreshold == alerts::kUseDefault ? MF_CHECKED : 0),
-                    base + DEV_ALERT_DEFAULT, T(L"Use default (15%)"));
+                    base + DEV_ALERT_DEFAULT, T(L"Use default (20%)"));
         AppendMenuW(alertMenu, MF_STRING | (selectedThreshold == alerts::kDisabled ? MF_CHECKED : 0),
                     base + DEV_ALERT_OFF, T(L"Disable notifications"));
         AppendMenuW(alertMenu, MF_SEPARATOR, 0, nullptr);

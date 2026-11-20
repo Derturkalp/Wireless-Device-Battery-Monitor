@@ -104,7 +104,7 @@ Wireless adapter = Adaptador sem fio
 # Additional UI translations (PR #3653)
 fully charged = totalmente carregado
 Battery alerts = Alertas de bateria
-Use default (15%) = Usar padrão (15%)
+Use default (20%) = Usar padrão (20%)
 Disable notifications = Desativar notificações
 Rename device... = Renomear dispositivo...
 Reset to original name = Restaurar nome original

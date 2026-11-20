@@ -104,7 +104,7 @@ Wireless adapter = Funkadapter
 # Additional UI translations (PR #3653)
 fully charged = vollständig geladen
 Battery alerts = Akkuwarnungen
-Use default (15%) = Standard verwenden (15 %)
+Use default (20%) = Standard verwenden (20 %)
 Disable notifications = Benachrichtigungen deaktivieren
 Rename device... = Gerät umbenennen...
 Reset to original name = Auf ursprünglichen Namen zurücksetzen

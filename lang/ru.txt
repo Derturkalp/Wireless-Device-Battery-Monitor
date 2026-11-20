@@ -105,7 +105,7 @@ Wireless adapter = Беспроводной адаптер
 # Additional UI translations (PR #3653)
 fully charged = полностью заряжено
 Battery alerts = Оповещения о заряде
-Use default (15%) = По умолчанию (15%)
+Use default (20%) = По умолчанию (20%)
 Disable notifications = Отключить уведомления
 Rename device... = Переименовать устройство...
 Reset to original name = Восстановить исходное название
