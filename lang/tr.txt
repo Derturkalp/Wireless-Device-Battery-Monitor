@@ -200,3 +200,5 @@ BatteryHub could not reopen. Please start it manually or repair the installation
 BatteryHub is up to date. = BatteryHub güncel.
 BatteryHub update = BatteryHub güncellemesi
 BatteryHub will close briefly while the update is installed. = Güncelleme yüklenirken BatteryHub kısa süreliğine kapanacaktır.
+
+{count} devices = {count} Cihaz
