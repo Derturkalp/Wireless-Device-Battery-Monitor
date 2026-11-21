@@ -25,6 +25,7 @@
 #include "report.h"
 #include "rename_dialog.h"
 #include "widget.h"
+#include "flyout.h"
 #include "update_win.h"
 #include "update_apply.h"
 
@@ -33,6 +34,7 @@ namespace {
 constexpr UINT WM_TRAY = WM_APP + 1;
 constexpr UINT WM_RESULTS = WM_APP + 2;
 constexpr UINT WM_WIDGET_CLICK = WM_APP + 3;
+constexpr UINT WM_FLYOUT_CMD = WM_APP + 4;  // kisisel: commands from the card panel
 constexpr UINT_PTR TIMER_DEBOUNCE = 1;
 constexpr UINT_PTR TIMER_WIDGET = 2;
 constexpr UINT_PTR TIMER_ALERT_ICON = 3;
@@ -615,6 +617,8 @@ void UpdateWidget() {
     widget::SetItems(items, tip);
 }
 
+void RefreshFlyout();  // kisisel: card panel, below
+
 void OnResults(std::vector<DeviceStatus>& results) {
     std::map<std::wstring, bool> seen;
     for (auto& s : results) {
@@ -659,6 +663,7 @@ void OnResults(std::vector<DeviceStatus>& results) {
     }
     UpdatePlaceholder();
     UpdateWidget();
+    if (flyout::Visible()) RefreshFlyout();
 }
 
 // Makes the actual display match the chosen mode; falls back to tray icons if the taskbar
@@ -824,6 +829,73 @@ void MoveEntry(const std::wstring& key, int dir) {
     UpdateWidget();
 }
 
+HMENU BuildDeviceMenu(const std::wstring& k, UINT base, bool canLeft, bool canRight) {
+    HMENU sub = CreatePopupMenu();
+    AppendMenuW(sub, MF_STRING | (IsHidden(k) ? 0 : MF_CHECKED), base + DEV_TOGGLE,
+                g_wantWidget ? T(L"Show on the taskbar") : T(L"Show in the tray"));
+    AppendMenuW(sub, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(sub, MF_STRING | (canLeft ? 0 : MF_GRAYED), base + DEV_LEFT, g_wantWidget ? T(L"Move left") : T(L"Move up"));
+    AppendMenuW(sub, MF_STRING | (canRight ? 0 : MF_GRAYED), base + DEV_RIGHT, g_wantWidget ? T(L"Move right") : T(L"Move down"));
+    AppendMenuW(sub, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(sub, MF_STRING, base + DEV_RENAME, T(L"Rename device..."));
+    AppendMenuW(sub, MF_STRING | (g_aliases.count(k) ? 0 : MF_GRAYED),
+                base + DEV_RESET_NAME, T(L"Reset to original name"));
+    HMENU alertMenu = CreatePopupMenu();
+    int selectedThreshold = alerts::OverrideFor(g_alertOverrides, k);
+    AppendMenuW(alertMenu, MF_STRING | (selectedThreshold == alerts::kUseDefault ? MF_CHECKED : 0),
+                base + DEV_ALERT_DEFAULT, T(L"Use default (20%)"));
+    AppendMenuW(alertMenu, MF_STRING | (selectedThreshold == alerts::kDisabled ? MF_CHECKED : 0),
+                base + DEV_ALERT_OFF, T(L"Disable notifications"));
+    AppendMenuW(alertMenu, MF_SEPARATOR, 0, nullptr);
+    for (int i = 0; i < alerts::kThresholdCount; ++i) {
+        int level = alerts::kThresholds[i];
+        std::wstring label = std::to_wstring(level) + L"%";
+        AppendMenuW(alertMenu, MF_STRING | (selectedThreshold == level ? MF_CHECKED : 0),
+                    base + DEV_ALERT_FIRST + i, label.c_str());
+    }
+    AppendMenuW(sub, MF_POPUP, (UINT_PTR)alertMenu, T(L"Battery alerts"));
+    AppendMenuW(sub, MF_STRING, base + DEV_HISTORY, T(L"Battery history..."));
+    return sub;
+}
+
+void RunDeviceCommand(const std::wstring& key, UINT slot) {
+    switch (slot) {
+        case DEV_TOGGLE: ToggleHidden(key); break;
+        case DEV_LEFT:   MoveEntry(key, -1); break;
+        case DEV_RIGHT:  MoveEntry(key, +1); break;
+        case DEV_RENAME: RenameDevice(key); break;
+        case DEV_RESET_NAME: ResetDeviceName(key); break;
+        case DEV_ALERT_DEFAULT: SetAlertOverride(key, alerts::kUseDefault); break;
+        case DEV_ALERT_OFF: SetAlertOverride(key, alerts::kDisabled); break;
+        case DEV_HISTORY: {
+            auto it = g_entries.find(key);
+            if (it != g_entries.end())
+                battery_history::Show(g_hwnd, key, DisplayName(it->second));
+            break;
+        }
+        default: {
+            if (slot >= DEV_ALERT_FIRST && slot < DEV_ALERT_FIRST + alerts::kThresholdCount)
+                SetAlertOverride(key, alerts::kThresholds[slot - DEV_ALERT_FIRST]);
+            break;
+        }
+    }
+}
+
+HMENU BuildLanguageMenu(const std::vector<i18n::Language>& languages) {
+    HMENU sub = CreatePopupMenu();
+    AppendMenuW(sub, MF_STRING, ID_LANG_AUTO, T(L"Automatic (Windows language)"));
+    AppendMenuW(sub, MF_SEPARATOR, 0, nullptr);
+    UINT checked = ID_LANG_AUTO;
+    for (UINT i = 0; i < languages.size(); i++) {
+        AppendMenuW(sub, MF_STRING, ID_LANG_FIRST + i, languages[i].name.c_str());
+        if (!i18n::Choice().empty() && _wcsicmp(languages[i].code.c_str(), i18n::Choice().c_str()) == 0) checked = ID_LANG_FIRST + i;
+    }
+    CheckMenuRadioItem(sub, ID_LANG_AUTO, ID_LANG_FIRST + 63, checked, MF_BYCOMMAND);
+    AppendMenuW(sub, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(sub, MF_STRING, ID_LANG_ADD, T(L"Add your own language..."));
+    return sub;
+}
+
 void ShowMenu() {
     ApplyMenuTheme(g_lightTaskbar);
     HMENU m = CreatePopupMenu();
@@ -837,31 +909,7 @@ void ShowMenu() {
         auto pos = std::find(shown.begin(), shown.end(), e);
         bool canLeft = pos != shown.end() && pos != shown.begin();
         bool canRight = pos != shown.end() && pos + 1 != shown.end();
-        HMENU sub = CreatePopupMenu();
-        AppendMenuW(sub, MF_STRING | (IsHidden(k) ? 0 : MF_CHECKED), base + DEV_TOGGLE,
-                    g_wantWidget ? T(L"Show on the taskbar") : T(L"Show in the tray"));
-        AppendMenuW(sub, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(sub, MF_STRING | (canLeft ? 0 : MF_GRAYED), base + DEV_LEFT, g_wantWidget ? T(L"Move left") : T(L"Move up"));
-        AppendMenuW(sub, MF_STRING | (canRight ? 0 : MF_GRAYED), base + DEV_RIGHT, g_wantWidget ? T(L"Move right") : T(L"Move down"));
-        AppendMenuW(sub, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(sub, MF_STRING, base + DEV_RENAME, T(L"Rename device..."));
-        AppendMenuW(sub, MF_STRING | (g_aliases.count(k) ? 0 : MF_GRAYED),
-                    base + DEV_RESET_NAME, T(L"Reset to original name"));
-        HMENU alertMenu = CreatePopupMenu();
-        int selectedThreshold = alerts::OverrideFor(g_alertOverrides, k);
-        AppendMenuW(alertMenu, MF_STRING | (selectedThreshold == alerts::kUseDefault ? MF_CHECKED : 0),
-                    base + DEV_ALERT_DEFAULT, T(L"Use default (20%)"));
-        AppendMenuW(alertMenu, MF_STRING | (selectedThreshold == alerts::kDisabled ? MF_CHECKED : 0),
-                    base + DEV_ALERT_OFF, T(L"Disable notifications"));
-        AppendMenuW(alertMenu, MF_SEPARATOR, 0, nullptr);
-        for (int i = 0; i < alerts::kThresholdCount; ++i) {
-            int level = alerts::kThresholds[i];
-            std::wstring label = std::to_wstring(level) + L"%";
-            AppendMenuW(alertMenu, MF_STRING | (selectedThreshold == level ? MF_CHECKED : 0),
-                        base + DEV_ALERT_FIRST + i, label.c_str());
-        }
-        AppendMenuW(sub, MF_POPUP, (UINT_PTR)alertMenu, T(L"Battery alerts"));
-        AppendMenuW(sub, MF_STRING, base + DEV_HISTORY, T(L"Battery history..."));
+        HMENU sub = BuildDeviceMenu(k, base, canLeft, canRight);
         std::wstring line = DisplayName(*e) + L":  " + StatusText(*e) + L"   [" + T(e->st.via) + L"]";
         AppendMenuW(m, MF_POPUP | (IsHidden(k) ? 0 : MF_CHECKED), (UINT_PTR)sub, line.c_str());
         keys.push_back(k);
@@ -904,20 +952,7 @@ void ShowMenu() {
     i18n::Init();  // picks up language files added since the last time
     auto languages = i18n::Available();
     if (languages.size() > 64) languages.resize(64);
-    {
-        HMENU sub = CreatePopupMenu();
-        AppendMenuW(sub, MF_STRING, ID_LANG_AUTO, T(L"Automatic (Windows language)"));
-        AppendMenuW(sub, MF_SEPARATOR, 0, nullptr);
-        UINT checked = ID_LANG_AUTO;
-        for (UINT i = 0; i < languages.size(); i++) {
-            AppendMenuW(sub, MF_STRING, ID_LANG_FIRST + i, languages[i].name.c_str());
-            if (!i18n::Choice().empty() && _wcsicmp(languages[i].code.c_str(), i18n::Choice().c_str()) == 0) checked = ID_LANG_FIRST + i;
-        }
-        CheckMenuRadioItem(sub, ID_LANG_AUTO, ID_LANG_FIRST + 63, checked, MF_BYCOMMAND);
-        AppendMenuW(sub, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(sub, MF_STRING, ID_LANG_ADD, T(L"Add your own language..."));
-        AppendMenuW(m, MF_POPUP, (UINT_PTR)sub, T(L"Language"));
-    }
+    AppendMenuW(m, MF_POPUP, (UINT_PTR)BuildLanguageMenu(languages), T(L"Language"));
     {
         HMENU sub = CreatePopupMenu();
         const UINT count = ARRAYSIZE(POLL_SECONDS);
@@ -979,29 +1014,108 @@ void ShowMenu() {
             } else if (cmd >= ID_MONITOR_FIRST && cmd < ID_MONITOR_FIRST + monitors.size()) {
                 SetWidgetMonitor(monitors[cmd - ID_MONITOR_FIRST].id);
             } else if (cmd >= ID_DEVICE_FIRST && cmd < ID_DEVICE_FIRST + keys.size() * DEV_STRIDE) {
-                std::wstring key = keys[(cmd - ID_DEVICE_FIRST) / DEV_STRIDE];
-                switch ((cmd - ID_DEVICE_FIRST) % DEV_STRIDE) {
-                    case DEV_TOGGLE: ToggleHidden(key); break;
-                    case DEV_LEFT:   MoveEntry(key, -1); break;
-                    case DEV_RIGHT:  MoveEntry(key, +1); break;
-                    case DEV_RENAME: RenameDevice(key); break;
-                    case DEV_RESET_NAME: ResetDeviceName(key); break;
-                    case DEV_ALERT_DEFAULT: SetAlertOverride(key, alerts::kUseDefault); break;
-                    case DEV_ALERT_OFF: SetAlertOverride(key, alerts::kDisabled); break;
-                    case DEV_HISTORY: {
-                        auto it = g_entries.find(key);
-                        if (it != g_entries.end())
-                            battery_history::Show(g_hwnd, key, DisplayName(it->second));
-                        break;
-                    }
-                    default: {
-                        UINT slot = (cmd - ID_DEVICE_FIRST) % DEV_STRIDE;
-                        if (slot >= DEV_ALERT_FIRST && slot < DEV_ALERT_FIRST + alerts::kThresholdCount)
-                            SetAlertOverride(key, alerts::kThresholds[slot - DEV_ALERT_FIRST]);
-                        break;
-                    }
-                }
+                RunDeviceCommand(keys[(cmd - ID_DEVICE_FIRST) / DEV_STRIDE], (cmd - ID_DEVICE_FIRST) % DEV_STRIDE);
             }
+    }
+}
+
+// ---- kisisel: card panel ----------------------------------------------------------------------
+
+std::vector<std::wstring> g_flyoutKeys;  // card index -> device key
+
+void RefreshFlyout() {
+    FlyoutContent c;
+    c.title = L"BatteryHub";
+    c.empty = T(L"No devices with battery info found");
+    c.buttons[0] = T(L"Refresh now");
+    c.buttons[1] = T(L"Battery history...");
+    c.buttons[2] = T(L"Language");
+    g_flyoutKeys.clear();
+    for (TrayEntry* e : OrderedEntries(true)) {
+        FlyoutItem it;
+        it.kind = e->st.kind;
+        it.name = DisplayName(*e);
+        bool offline = !e->st.connected;
+        it.sub = T(e->st.via);
+        if (offline) it.sub += std::wstring(L" \u00B7 ") + T(L"off / not connected");
+        else if (e->st.asleep) it.sub += std::wstring(L" \u00B7 ") + T(L"asleep");
+        it.percent = offline ? -1 : (e->st.percent >= 0 ? e->st.percent : e->lastPct);
+        if (offline) it.text = L"\u00D7";
+        else if (e->st.percent >= 0 && !e->st.levelText.empty()) it.text = T(e->st.levelText);
+        it.charging = !offline && !e->st.asleep && e->st.charging;
+        it.full = !offline && (e->st.full || (e->st.charging && it.percent >= 100));
+        it.dim = ShouldDim(e->st) || offline;
+        it.low = !offline && !it.charging && it.percent >= 0 && it.percent <= LOW_BATTERY;
+        it.bluetooth = e->st.via == L"Bluetooth";
+        c.items.push_back(it);
+        g_flyoutKeys.push_back(e->st.key);
+    }
+    c.count = TF(L"{count} devices", { { L"count", std::to_wstring(c.items.size()) } });
+    flyout::SetContent(c);
+}
+
+void ShowFlyout() {
+    RefreshFlyout();
+    POINT pt;
+    GetCursorPos(&pt);
+    flyout::Toggle(g_inst, g_hwnd, WM_FLYOUT_CMD, pt, g_lightTaskbar);
+}
+
+UINT TrackAtCursor(HMENU m) {
+    ApplyMenuTheme(g_lightTaskbar);
+    POINT pt;
+    GetCursorPos(&pt);
+    SetForegroundWindow(g_hwnd);
+    UINT cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON | (i18n::Rtl() ? TPM_LAYOUTRTL : 0),
+                              pt.x, pt.y, 0, g_hwnd, nullptr);
+    PostMessageW(g_hwnd, WM_NULL, 0, 0);
+    DestroyMenu(m);
+    return cmd;
+}
+
+void OnFlyoutCommand(WPARAM cmd, LPARAM arg) {
+    switch (cmd) {
+        case flyout::CMD_REFRESH: SetEvent(g_refreshEvt); break;
+        case flyout::CMD_MENU: ShowMenu(); break;
+        case flyout::CMD_LANGUAGE: {
+            i18n::Init();
+            auto languages = i18n::Available();
+            if (languages.size() > 64) languages.resize(64);
+            UINT c = TrackAtCursor(BuildLanguageMenu(languages));
+            if (c == ID_LANG_AUTO) SetLanguage(L"");
+            else if (c == ID_LANG_ADD) i18n::OpenUserFolder();
+            else if (c >= ID_LANG_FIRST && c < ID_LANG_FIRST + languages.size()) SetLanguage(languages[c - ID_LANG_FIRST].code);
+            break;
+        }
+        case flyout::CMD_HISTORY: {
+            std::vector<std::wstring> keys = g_flyoutKeys;
+            if (keys.empty()) break;
+            std::wstring key = keys[0];
+            if (keys.size() > 1) {
+                HMENU m = CreatePopupMenu();
+                for (UINT i = 0; i < keys.size(); i++) {
+                    auto it = g_entries.find(keys[i]);
+                    if (it != g_entries.end()) AppendMenuW(m, MF_STRING, ID_DEVICE_FIRST + i, DisplayName(it->second).c_str());
+                }
+                UINT c = TrackAtCursor(m);
+                if (c < ID_DEVICE_FIRST || c >= ID_DEVICE_FIRST + keys.size()) break;
+                key = keys[c - ID_DEVICE_FIRST];
+            }
+            RunDeviceCommand(key, DEV_HISTORY);
+            break;
+        }
+        case flyout::CMD_DEVICE: {
+            if (arg < 0 || (size_t)arg >= g_flyoutKeys.size()) break;
+            std::wstring key = g_flyoutKeys[(size_t)arg];
+            if (!g_entries.count(key)) break;
+            std::vector<TrayEntry*> shown = OrderedEntries(true);
+            auto pos = std::find_if(shown.begin(), shown.end(), [&](TrayEntry* e) { return e->st.key == key; });
+            bool canLeft = pos != shown.end() && pos != shown.begin();
+            bool canRight = pos != shown.end() && pos + 1 != shown.end();
+            UINT c = TrackAtCursor(BuildDeviceMenu(key, ID_DEVICE_FIRST, canLeft, canRight));
+            if (c >= ID_DEVICE_FIRST && c < ID_DEVICE_FIRST + DEV_STRIDE) RunDeviceCommand(key, c - ID_DEVICE_FIRST);
+            break;
+        }
     }
 }
 
@@ -1084,13 +1198,17 @@ LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_TRAY:
             switch (LOWORD(lp)) {
-                case WM_CONTEXTMENU:
+                case WM_CONTEXTMENU: ShowMenu(); break;
                 case NIN_SELECT:
-                case NIN_KEYSELECT: ShowMenu(); break;
+                case NIN_KEYSELECT: ShowFlyout(); break;
             }
             return 0;
-        case WM_WIDGET_CLICK:
-            ShowMenu();
+        case WM_WIDGET_CLICK:  // kisisel: left click opens the card panel, right click the full menu
+            if (wp == 1) { flyout::Close(); ShowMenu(); }
+            else ShowFlyout();
+            return 0;
+        case WM_FLYOUT_CMD:
+            OnFlyoutCommand(wp, lp);
             return 0;
         case WM_ENDSESSION:  // sign-out / shutdown / installer restart manager
             if (wp) DestroyWindow(h);

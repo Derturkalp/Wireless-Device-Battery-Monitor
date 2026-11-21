@@ -33,3 +33,11 @@ Ya da Windows'ta MSYS2 kurup (`pacman -S mingw-w64-x86_64-gcc make`) klasörde `
 - **MCHOSE klavye:** modeline göre 2.4 GHz alıcıda çalışır; Bluetooth/kablo modları her modelde desteklenmiyor.
 - **Xbox kolu:** Xbox kablosuz adaptör, USB veya Bluetooth ile doğrudan çalışır.
 - Görünmesini istemediğin bir cihaz olursa menüden üstüne tıklayıp gizleyebilirsin.
+
+## Kart paneli (v2)
+
+- Görev çubuğundaki pil yazılarına **sol tık**: cihaz kartları, seviye çubukları ve
+  *Şimdi yenile / Pil geçmişi / Dil* düğmeleri olan panel açılır.
+- Bir karta tıklamak o cihazın menüsünü açar (gizle, taşı, yeniden adlandır, uyarı eşiği).
+- **Sağ tık** (görev çubuğunda ya da panelde): bütün ayarların olduğu klasik menü.
+- Kod: `src/flyout.cpp`, `src/flyout.h`.
