@@ -36,4 +36,6 @@ void Toggle(HINSTANCE inst, HWND owner, UINT cmdMsg, POINT anchor, bool light);
 void SetContent(const FlyoutContent& c);  // also updates an open panel
 void Close();
 bool Visible();
+HWND Window();          // the open panel, or nullptr
+void Hold(bool hold);   // while true the panel stays open even if it loses focus (menus on top of it)
 }

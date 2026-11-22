@@ -1137,11 +1137,15 @@ UINT TrackAtCursor(HMENU m) {
     ApplyMenuTheme(g_lightTaskbar);
     POINT pt;
     GetCursorPos(&pt);
-    SetForegroundWindow(g_hwnd);
+    // Owned by the open card panel so the panel stays on screen behind the menu.
+    HWND owner = flyout::Visible() ? flyout::Window() : g_hwnd;
+    flyout::Hold(true);
+    SetForegroundWindow(owner);
     UINT cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON | (i18n::Rtl() ? TPM_LAYOUTRTL : 0),
-                              pt.x, pt.y, 0, g_hwnd, nullptr);
-    PostMessageW(g_hwnd, WM_NULL, 0, 0);
+                              pt.x, pt.y, 0, owner, nullptr);
+    PostMessageW(owner, WM_NULL, 0, 0);
     DestroyMenu(m);
+    flyout::Hold(false);
     return cmd;
 }
 
@@ -1157,6 +1161,7 @@ void OnFlyoutCommand(WPARAM cmd, LPARAM arg) {
             if (c == ID_LANG_AUTO) SetLanguage(L"");
             else if (c == ID_LANG_ADD) i18n::OpenUserFolder();
             else if (c >= ID_LANG_FIRST && c < ID_LANG_FIRST + languages.size()) SetLanguage(languages[c - ID_LANG_FIRST].code);
+            if (flyout::Visible()) RefreshFlyout();
             break;
         }
         case flyout::CMD_HISTORY: {
@@ -1173,6 +1178,7 @@ void OnFlyoutCommand(WPARAM cmd, LPARAM arg) {
                 if (c < ID_DEVICE_FIRST || c >= ID_DEVICE_FIRST + keys.size()) break;
                 key = keys[c - ID_DEVICE_FIRST];
             }
+            flyout::Close();  // the history window takes over
             RunDeviceCommand(key, DEV_HISTORY);
             break;
         }
@@ -1185,7 +1191,11 @@ void OnFlyoutCommand(WPARAM cmd, LPARAM arg) {
             bool canLeft = pos != shown.end() && pos != shown.begin();
             bool canRight = pos != shown.end() && pos + 1 != shown.end();
             UINT c = TrackAtCursor(BuildDeviceMenu(key, ID_DEVICE_FIRST, canLeft, canRight));
-            if (c >= ID_DEVICE_FIRST && c < ID_DEVICE_FIRST + DEV_STRIDE) RunDeviceCommand(key, c - ID_DEVICE_FIRST);
+            if (c < ID_DEVICE_FIRST || c >= ID_DEVICE_FIRST + DEV_STRIDE) break;
+            UINT slot = c - ID_DEVICE_FIRST;
+            if (slot == DEV_RENAME || slot == DEV_HISTORY) flyout::Close();  // a dialog / window takes over
+            RunDeviceCommand(key, slot);
+            if (flyout::Visible()) RefreshFlyout();  // panel stays open with the change applied
             break;
         }
     }

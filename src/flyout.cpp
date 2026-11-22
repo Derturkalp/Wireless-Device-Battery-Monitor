@@ -19,6 +19,7 @@ ULONGLONG g_closedAt;
 FlyoutContent g_c;
 int g_hover = -1;  // card index, or kButtonBase + button
 bool g_tracking;
+bool g_hold;
 
 constexpr int kButtonBase = 1000;
 // Layout in 96-dpi pixels.
@@ -283,10 +284,10 @@ LRESULT CALLBACK Proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             int hit = HitTest(p);
             if (hit == kButtonBase) { Send(flyout::CMD_REFRESH, 0); return 0; }  // stays open, updates in place
             if (hit < 0) return 0;
+            // The panel stays open; the owner shows its menu on top and refreshes the cards afterwards.
             if (hit == kButtonBase + 1) Send(flyout::CMD_HISTORY, 0);
             else if (hit == kButtonBase + 2) Send(flyout::CMD_LANGUAGE, 0);
             else Send(flyout::CMD_DEVICE, hit);
-            DestroyWindow(h);
             return 0;
         }
         case WM_RBUTTONUP:
@@ -297,7 +298,7 @@ LRESULT CALLBACK Proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (wp == VK_ESCAPE) DestroyWindow(h);
             return 0;
         case WM_ACTIVATE:
-            if (LOWORD(wp) == WA_INACTIVE) PostMessageW(h, WM_CLOSE, 0, 0);
+            if (LOWORD(wp) == WA_INACTIVE && !g_hold) PostMessageW(h, WM_CLOSE, 0, 0);
             return 0;
         case WM_CLOSE:
             DestroyWindow(h);
@@ -320,6 +321,14 @@ LRESULT CALLBACK Proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
 namespace flyout {
 
 bool Visible() { return g_wnd != nullptr; }
+
+HWND Window() { return g_wnd; }
+
+void Hold(bool hold) {
+    g_hold = hold;
+    // Released while something else took the focus (the user clicked away from the menu): close.
+    if (!hold && g_wnd && GetForegroundWindow() != g_wnd) PostMessageW(g_wnd, WM_CLOSE, 0, 0);
+}
 
 void Close() {
     if (g_wnd) DestroyWindow(g_wnd);
