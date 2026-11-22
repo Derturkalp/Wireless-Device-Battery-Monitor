@@ -56,7 +56,9 @@ enum MenuId : UINT {
 };
 enum DeviceCmd : UINT {
     DEV_TOGGLE, DEV_LEFT, DEV_RIGHT, DEV_RENAME, DEV_RESET_NAME, DEV_HISTORY,
-    DEV_ALERT_FIRST = 6, DEV_ALERT_DEFAULT = DEV_ALERT_FIRST + 8, DEV_ALERT_OFF, DEV_STRIDE = 16
+    DEV_ALERT_FIRST = 6, DEV_ALERT_DEFAULT = DEV_ALERT_FIRST + 8, DEV_ALERT_OFF,
+    DEV_ICON_AUTO = 16, DEV_ICON_FIRST,  // kisisel: "Icon" submenu, DEV_ICON_FIRST + (int)DeviceKind
+    DEV_STRIDE = 32
 };
 
 const wchar_t* kAppName = L"BatteryHub";
@@ -121,6 +123,40 @@ void SaveAliases() {
     auto data = aliases::Encode(g_aliases);
     RegSetKeyValueW(HKEY_CURRENT_USER, kSettingsKey, L"DeviceAliases", REG_MULTI_SZ,
                     data.data(), (DWORD)(data.size() * sizeof(wchar_t)));
+}
+
+// ---- kisisel: per-device icon override -----------------------------------------------------------
+// Stored as REG_MULTI_SZ "DeviceIcons" entries "<kind number>|<device key>".
+
+constexpr int kKindCount = 7;  // DeviceKind::Other .. DeviceKind::Microphone
+std::map<std::wstring, DeviceKind> g_iconOverrides;
+std::map<std::wstring, DeviceKind> g_detectedKind;  // what the driver reported, to undo an override
+
+void LoadIconOverrides() {
+    DWORD size = 0;
+    if (RegGetValueW(HKEY_CURRENT_USER, kSettingsKey, L"DeviceIcons", RRF_RT_REG_MULTI_SZ, nullptr, nullptr, &size) != ERROR_SUCCESS || !size)
+        return;
+    if (size > 128 * 1024) return;
+    std::vector<wchar_t> buf(size / sizeof(wchar_t) + 1, 0);
+    if (RegGetValueW(HKEY_CURRENT_USER, kSettingsKey, L"DeviceIcons", RRF_RT_REG_MULTI_SZ, nullptr, buf.data(), &size) != ERROR_SUCCESS)
+        return;
+    for (const wchar_t* p = buf.data(); *p; p += wcslen(p) + 1) {
+        const wchar_t* bar = wcschr(p, L'|');
+        if (!bar || bar == p || !bar[1]) continue;
+        int kind = _wtoi(p);
+        if (kind < 0 || kind >= kKindCount) continue;
+        g_iconOverrides[bar + 1] = (DeviceKind)kind;
+    }
+}
+
+void SaveIconOverrides() {
+    std::wstring multi;
+    for (const auto& [key, kind] : g_iconOverrides) {
+        multi += std::to_wstring((int)kind) + L"|" + key;
+        multi.push_back(L'\0');
+    }
+    multi.push_back(L'\0');
+    RegSetKeyValueW(HKEY_CURRENT_USER, kSettingsKey, L"DeviceIcons", REG_MULTI_SZ, multi.data(), (DWORD)(multi.size() * sizeof(wchar_t)));
 }
 
 // ---- helpers ----------------------------------------------------------------------------------
@@ -622,6 +658,8 @@ void RefreshFlyout();  // kisisel: card panel, below
 void OnResults(std::vector<DeviceStatus>& results) {
     std::map<std::wstring, bool> seen;
     for (auto& s : results) {
+        g_detectedKind[s.key] = s.kind;
+        if (auto ov = g_iconOverrides.find(s.key); ov != g_iconOverrides.end()) s.kind = ov->second;
         auto& e = g_entries[s.key];
         if (!e.uid) e.uid = StableId(s.key);
         e.st = s;
@@ -829,6 +867,23 @@ void MoveEntry(const std::wstring& key, int dir) {
     UpdateWidget();
 }
 
+void SetIconOverride(const std::wstring& key, int kind) {  // kind < 0 = automatic
+    auto it = g_entries.find(key);
+    if (kind < 0) {
+        g_iconOverrides.erase(key);
+        if (it != g_entries.end()) {
+            auto d = g_detectedKind.find(key);
+            if (d != g_detectedKind.end()) it->second.st.kind = d->second;
+        }
+    } else {
+        g_iconOverrides[key] = (DeviceKind)kind;
+        if (it != g_entries.end()) it->second.st.kind = (DeviceKind)kind;
+    }
+    SaveIconOverrides();
+    if (it != g_entries.end()) ApplyEntry(it->second);
+    UpdateWidget();
+}
+
 HMENU BuildDeviceMenu(const std::wstring& k, UINT base, bool canLeft, bool canRight) {
     HMENU sub = CreatePopupMenu();
     AppendMenuW(sub, MF_STRING | (IsHidden(k) ? 0 : MF_CHECKED), base + DEV_TOGGLE,
@@ -854,6 +909,20 @@ HMENU BuildDeviceMenu(const std::wstring& k, UINT base, bool canLeft, bool canRi
                     base + DEV_ALERT_FIRST + i, label.c_str());
     }
     AppendMenuW(sub, MF_POPUP, (UINT_PTR)alertMenu, T(L"Battery alerts"));
+    {  // kisisel: icon choice
+        static const wchar_t* kKindNames[kKindCount] = { L"Other", L"Mouse", L"Headset", L"Keyboard",
+                                                         L"Controller", L"Phone", L"Microphone" };
+        static const int kOrder[kKindCount] = { 1, 3, 2, 4, 5, 6, 0 };
+        HMENU iconMenu = CreatePopupMenu();
+        auto ov = g_iconOverrides.find(k);
+        AppendMenuW(iconMenu, MF_STRING | (ov == g_iconOverrides.end() ? MF_CHECKED : 0), base + DEV_ICON_AUTO,
+                    T(L"Automatic"));
+        AppendMenuW(iconMenu, MF_SEPARATOR, 0, nullptr);
+        for (int kind : kOrder)
+            AppendMenuW(iconMenu, MF_STRING | (ov != g_iconOverrides.end() && (int)ov->second == kind ? MF_CHECKED : 0),
+                        base + DEV_ICON_FIRST + kind, T(kKindNames[kind]));
+        AppendMenuW(sub, MF_POPUP, (UINT_PTR)iconMenu, T(L"Icon"));
+    }
     AppendMenuW(sub, MF_STRING, base + DEV_HISTORY, T(L"Battery history..."));
     return sub;
 }
@@ -867,6 +936,7 @@ void RunDeviceCommand(const std::wstring& key, UINT slot) {
         case DEV_RESET_NAME: ResetDeviceName(key); break;
         case DEV_ALERT_DEFAULT: SetAlertOverride(key, alerts::kUseDefault); break;
         case DEV_ALERT_OFF: SetAlertOverride(key, alerts::kDisabled); break;
+        case DEV_ICON_AUTO: SetIconOverride(key, -1); break;
         case DEV_HISTORY: {
             auto it = g_entries.find(key);
             if (it != g_entries.end())
@@ -876,6 +946,8 @@ void RunDeviceCommand(const std::wstring& key, UINT slot) {
         default: {
             if (slot >= DEV_ALERT_FIRST && slot < DEV_ALERT_FIRST + alerts::kThresholdCount)
                 SetAlertOverride(key, alerts::kThresholds[slot - DEV_ALERT_FIRST]);
+            else if (slot >= DEV_ICON_FIRST && slot < DEV_ICON_FIRST + kKindCount)
+                SetIconOverride(key, (int)(slot - DEV_ICON_FIRST));
             break;
         }
     }
@@ -1417,6 +1489,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
     LoadHidden();
     LoadOrder();
     LoadAliases();
+    LoadIconOverrides();
     LoadAlertThresholds();
     battery_history::Initialize(g_demo);
     Reconcile();
