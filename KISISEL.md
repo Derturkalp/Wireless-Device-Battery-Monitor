@@ -41,3 +41,9 @@ Ya da Windows'ta MSYS2 kurup (`pacman -S mingw-w64-x86_64-gcc make`) klasörde `
 - Bir karta tıklamak o cihazın menüsünü açar (gizle, taşı, yeniden adlandır, uyarı eşiği).
 - **Sağ tık** (görev çubuğunda ya da panelde): bütün ayarların olduğu klasik menü.
 - Kod: `src/flyout.cpp`, `src/flyout.h`.
+
+## Simge değiştirme
+
+Bir cihazın simgesi yanlışsa: panelde karta tıkla (ya da sağ tık menüsünde cihazın üstüne gel)
+→ **Simge** → Fare / Klavye / Kulaklık / Oyun kolu / Telefon / Mikrofon / Diğer.
+**Otomatik** programın kendi tahminine döner. Seçim kayıt defterinde (`DeviceIcons`) saklanır.

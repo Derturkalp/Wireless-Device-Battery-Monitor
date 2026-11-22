@@ -202,3 +202,12 @@ BatteryHub update = BatteryHub güncellemesi
 BatteryHub will close briefly while the update is installed. = Güncelleme yüklenirken BatteryHub kısa süreliğine kapanacaktır.
 
 {count} devices = {count} Cihaz
+Icon = Simge
+Automatic = Otomatik
+Mouse = Fare
+Headset = Kulaklık
+Keyboard = Klavye
+Controller = Oyun kolu
+Phone = Telefon
+Microphone = Mikrofon
+Other = Diğer
